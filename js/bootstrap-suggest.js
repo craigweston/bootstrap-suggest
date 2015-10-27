@@ -32,7 +32,7 @@
 		this.query = '';
 		this._queryPos = [];
 		this._keyPos = -1;
-            
+    this._suggestions = this.options.suggestions  || [];
 		this.$dropdown = $('<div />', {
 		    	'class': 'dropdown suggest ' + this.options.dropdownClass,
 			'html': $('<ul />', {'class': 'dropdown-menu', role: 'menu'}),
@@ -200,14 +200,63 @@
       return this.$items ? this.$items.not('.hidden') : $();
 		},
 
+    __findSuggestion: function(value) {
+      for(var i=0; i<this._suggestions.length; ++i) {
+        if(value == this._suggestions[i].value) {
+          return i;
+        }
+      }
+      return -1;
+    },
+
 		__build: function() {
 			var elems = [], $item,
 				$dropdown = this.$dropdown,
+        $el = this.$element,
 				that = this;
 
 			var blur = function(e) {
 				that.hide();
 			}
+
+      $el.on('keydown', function(e) {
+        switch (e.keyCode) {
+          case 8:
+            var caretPos = that.__getSelection($el.get(0)).start,
+              val = $el.val(),
+              ch = val[caretPos-1];
+
+            if(/\s/.test(ch)) { break; }
+
+            var keyPos = -1;
+            for(var i = caretPos; i >= 0; --i) {
+              if (that.key == val[i]) {
+                keyPos = i;
+                break;
+              }
+            }
+
+            if(keyPos >= 0) {
+              var len = caretPos-keyPos,
+                setCaretPos = keyPos + len,
+                value = val.substr(keyPos+1, len-1),
+                index;
+
+              index = that.__findSuggestion(value);
+
+              if(-1 !== index) {
+                var newVal = val.slice(0, keyPos) + val.slice(caretPos);
+                // remove only if last occurance of mention
+                if (new RegExp('@' + newVal, 'i').test(newVal)) {
+                  array.splice(index, 1);
+                }
+                $el.val(newVal);
+                that.__setCaretPosition(keyPos);
+              }
+            }
+            break;
+        }
+      });
 
 			$dropdown
 				.on('click', 'li:has(a)', function(e) {
@@ -292,17 +341,17 @@
 			}
 
 			if (dataItem instanceof Object) {
-				_item.text = dataItem.text || '';
-				_item.value = dataItem.value || '';
+        _item = $.extend(_item, dataItem);
 			} else {
 				_item.text = dataItem;
 				_item.value = dataItem;
 			}
 
-			return $('<li />', {'data-value': _item.value}).html($('<a />', {
+			var $item = $('<li />', { data: { suggestion: _item } }).html($('<a />', {
 				href: '#',
-				html: _item.text
+				html: _item.text,
 			}));
+      return $item;
 		},
 
 		__select: function(index) {
@@ -312,22 +361,29 @@
 				item = this.get(index),
 				setCaretPos = this._keyPos + item.value.length + 1;
 
+      this.addSuggestion(item.data);
+
 			$el.val(val.slice(0, this._keyPos) + item.value + ' ' + val.slice(this.__getSelection(el).start));
 
-			if (el.setSelectionRange) {
-				el.setSelectionRange(setCaretPos, setCaretPos);
-			} else if (el.createTextRange) {
-				var range = el.createTextRange();
-				range.collapse(true);
-				range.moveEnd('character', setCaretPos);
-				range.moveStart('character', setCaretPos);
-				range.select();
-			}
+      this.__setCaretPosition(setCaretPos);
 
 			$el.trigger($.extend({type: 'suggest.select'}, this), item);
 
 			this.hide();
 		},
+
+    __setCaretPosition: function (setCaretPos) {
+			var el = this.$element.get(0);
+      if (el.setSelectionRange) {
+          el.setSelectionRange(setCaretPos, setCaretPos);
+        } else if (el.createTextRange) {
+          var range = el.createTextRange();
+          range.collapse(true);
+          range.moveEnd('character', setCaretPos);
+          range.moveStart('character', setCaretPos);
+          range.select();
+        }
+    },
 
 		__getSelection: function (el)
 		{
@@ -430,10 +486,12 @@
 
     get: function(index) {
       if(!this.$items) { return; }
-      var $item = this.$items.eq(index);
+      var $item = this.$items.eq(index),
+        data = $item.data('suggestion');
       return {
         text: $item.children('a:first').text(),
-        value: $item.attr('data-value'),
+        value: data.value,
+        data: data,
         index: index,
         $element: $item
       };
@@ -536,7 +594,19 @@
 				this.isShown = true;
 				$el.trigger($.extend({type: 'suggest.show'}, this));
 			}
-		}
+		},
+
+    getSuggestions: function() {
+      return this._suggestions;
+    },
+
+    addSuggestion: function(suggestion) {
+      var index = this.__findSuggestion(suggestion.value);
+      if(-1 === index) {
+        this._suggestions.push(suggestion);
+      }
+    }
+
 	};
 
 	var old = $.fn.suggest;
