@@ -49,6 +49,8 @@
 				.on('suggest.show', $.proxy(this.options.onshow, this))
 				.on('suggest.select', $.proxy(this.options.onselect, this))
 				.on('suggest.lookup', $.proxy(this.options.onlookup, this))
+				.on('suggest.added', $.proxy(this.options.added, this))
+				.on('suggest.removed', $.proxy(this.options.removed, this))
 				.on('keypress', $.proxy(this.__keypress, this))
 				.on('keyup', $.proxy(this.__keyup, this));
 
@@ -247,8 +249,11 @@
               if(-1 !== index) {
                 var newVal = val.slice(0, keyPos) + val.slice(caretPos);
                 // remove only if last occurance of mention
-                if (new RegExp('@' + newVal, 'i').test(newVal)) {
-                  array.splice(index, 1);
+                var regxExists = new RegExp('@' + value, 'i')
+                if (!regxExists.test(newVal)) {
+                  var suggestion = that._suggestions[index];
+                  that._suggestions.splice(index, 1);
+                  that.$element.trigger($.extend({type: 'suggest.removed'}, that), { index: index, item: suggestion });
                 }
                 $el.val(newVal);
                 that.__setCaretPosition(keyPos);
@@ -604,6 +609,7 @@
       var index = this.__findSuggestion(suggestion.value);
       if(-1 === index) {
         this._suggestions.push(suggestion);
+        this.$element.trigger($.extend({type: 'suggest.added'}, this), { index: this._suggestions.length-1, item: suggestion });
       }
     }
 
